@@ -17,8 +17,10 @@ import (
 	"time"
 )
 
+type cacheFreshness int
+
 const (
-	stale = iota
+	stale cacheFreshness = iota
 	fresh
 	transparent
 	// Header added to responses that are returned from the cache
@@ -147,12 +149,10 @@ func (t *Transport) RoundTrip(req *http.Request) (resp *http.Response, err error
 
 		if varyMatches(cachedResp, req) {
 			// Can only use cached value if the new request doesn't Vary significantly
-			freshness := getFreshness(cachedResp.Header, req.Header)
-			if freshness == fresh {
+			switch getFreshness(cachedResp.Header, req.Header) {
+			case fresh:
 				return cachedResp, nil
-			}
-
-			if freshness == stale {
+			case stale:
 				// Add validators if caller hasn't already done so
 				etag := cachedResp.Header.Get("etag")
 				if etag != "" && req.Header.Get("etag") == "" {
@@ -223,7 +223,7 @@ func (t *Transport) RoundTrip(req *http.Request) (resp *http.Response, err error
 // signficant. Similarly, smax-age isn't used.
 //
 // Limitation: max-stale is not taken into account. It should be.
-func getFreshness(respHeaders, reqHeaders http.Header) (freshness int) {
+func getFreshness(respHeaders, reqHeaders http.Header) cacheFreshness {
 	respCacheControl := parseCacheControl(respHeaders)
 	reqCacheControl := parseCacheControl(reqHeaders)
 	if _, ok := reqCacheControl["no-cache"]; ok {
